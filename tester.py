@@ -31,13 +31,7 @@ def test(imgPath,wmPath, enc_plane=0, block_size=2):
     decoder=Decoder(encoded_image_gaussian_noise,block_size,enc_plane)
     decoded_watermark=decoder.decode()
 
-    # cv2.imshow('Decoded',decoded_watermark)
-    # cv2.waitKey(0)
-
     return PSNR(img,encoded_image),NCC(wm,decoded_watermark)
-
-    # print('PSNR between Original and Encoded Image:',PSNR(img,encoded_image))
-    # print('NCC between Original and Decoded Watermark:',NCC(wm,decoded_watermark))
 
 
 img='imgs/barbara256.png'
