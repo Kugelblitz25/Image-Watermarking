@@ -72,8 +72,7 @@ class Encoder:
 
         self.watermark = cv2.resize(
             self.watermark, (self.w//self.blockSize, self.h//self.blockSize))
-        _, self.watermark = cv2.threshold(
-            self.watermark, 127, 255, cv2.THRESH_BINARY)
+        _, self.watermark = cv2.threshold(self.watermark, 127, 255, cv2.THRESH_BINARY)
 
         self.h_w, self.w_w = self.watermark.shape
 
@@ -95,7 +94,7 @@ class Encoder:
         img_block = self.img[row*self.blockSize:(row+1)*self.blockSize,
                              col*self.blockSize:(col+1)*self.blockSize]
         enc_block = enc*np.ones_like(img_block, 'uint8')
-        masked_img = img_block & (255 - 1 << self.plane)
+        masked_img = img_block & (255 - (1 << self.plane))
         masked_enc = enc_block & (1 << self.plane)
         return masked_img + masked_enc
 

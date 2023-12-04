@@ -2,7 +2,9 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 from main import Encoder, Decoder, ImageLoader
+import cv2
 
+plt.style.use('dark_background')
 
 class Metrics:
     """
@@ -29,7 +31,7 @@ class Metrics:
         img1Path, img1 = ImageLoader(img1)
         img2Path, img2 = ImageLoader(img2)
         assert img1.shape == img2.shape, "Image sizes don't match."
-        return img1, img2
+        return img1.astype('float64'), img2.astype('float64')
 
     def MSE(self, img1, img2):
         """
@@ -84,7 +86,6 @@ class Metrics:
         CC = ((img1 - img1.mean()) * (img2 - img2.mean())).sum() / (w * h)
         return CC / (img1.std() * img2.std())
 
-
 class Tester:
     """
     Class for testing the encoder and decoder with various parameters.
@@ -122,7 +123,7 @@ class Tester:
         self.encoder = Encoder(blocksize, plane)
         self.decoder = Decoder(blocksize, plane)
 
-    def unitTest(self, imageIdx: int, watermarkIdx: int):
+    def unitTest(self, imageIdx: int, watermarkIdx: int, disp: bool = False):
         """
         Perform a unit test with a specific pair of images and watermarks.
 
@@ -144,10 +145,14 @@ class Tester:
         encoded_image = self.encoder.encode(img, wm)
 
         noise = 0.5 * np.random.randn(*encoded_image.shape)
-        encoded_image_gaussian_noise = np.uint8(
-            np.round(encoded_image + noise, 0))
+        encoded_image_gaussian_noise = np.uint8(np.round(encoded_image + noise, 0))
 
         decoded_wm = self.decoder.decode(encoded_image_gaussian_noise)
+
+        if disp:
+            cv2.imshow('Decoded',decoded_wm)
+            cv2.imshow('Encoded',encoded_image)
+            cv2.waitKey(0)
 
         psnr = self.metrics.PSNR(img, encoded_image)
         ncc = self.metrics.NCC(self.encoder.watermark, decoded_wm)
@@ -175,20 +180,63 @@ class Tester:
 
         return PSNR_Tot / num_pairs, NCC_Tot / num_pairs
 
+def plotRes(ax, x, y, title, xlabel, ylabel):
+    ax.plot(x, y, marker='o')
+    ax.set_title(title, fontsize=12, fontweight='bold')
+    ax.set_xlabel(xlabel, fontsize=12)
+    ax.set_ylabel(ylabel,  fontsize=12)
+    ax.set_xticks(x)
+    ax.grid(axis='x',linestyle='--',color='grey')
 
-# Example usage
-imgDir = 'imgs'
-wmDir = 'watermarks'
+def testPlanes(fig,axes):
+    # Testing for encoding in different planes with blocksize=4 
+    planes = np.arange(1,9)
+    PSNRs = []
+    NCCs = []
 
-PSNRs = []
-NCCs = []
+    for plane in planes:
+        tester = Tester(imgDir, wmDir, plane, 4)
+        psnr, ncc = tester.CompleteTest()
+        PSNRs.append(psnr)
+        NCCs.append(ncc)
 
-for i in range(1, 9):
-    tester = Tester(imgDir, wmDir, i, 4)
-    psnr, ncc = tester.CompleteTest()
-    PSNRs.append(psnr)
-    NCCs.append(ncc)
+    ax=axes.flatten()
+    fig.suptitle('Encoding at different planes.', fontsize=16, fontweight='bold')
+    plotRes(ax[0],planes,PSNRs,'Effect on PSNR.','Plane used for encoding','PSNR between normal and encoded image.')
+    plotRes(ax[1],planes,NCCs,'Effect on NCC.','Plane used for encoding','NCC between normal and extracted watermark.')
+    ax[1].set_ylim(0.5,1)
 
-x = np.arange(1, 9)
-plt.plot(x, PSNRs)
-plt.show()
+def testBlocksizes(fig,axes):
+    # Testing for encoding with different blocksizes at plane=2 
+    blocksizes = np.arange(1,11)
+    PSNRs = []
+    NCCs = []
+
+    for bs in blocksizes:
+        tester = Tester(imgDir, wmDir, 2, bs)
+        psnr, ncc = tester.CompleteTest()
+        PSNRs.append(psnr)
+        NCCs.append(ncc)
+
+    ax=axes.flatten()
+    fig.suptitle('Encoding with different blocksizes.', fontsize=16, fontweight='bold')
+    plotRes(ax[0],blocksizes,PSNRs,'Effect on PSNR.','Blocksize used for encoding','PSNR between normal and encoded image.')
+    plotRes(ax[1],blocksizes,NCCs,'Effect on NCC.','Blocksize used for encoding','NCC between normal and extracted watermark.')
+    ax[1].set_ylim(0.5,1)
+
+if __name__=="__main__":
+    # Testing
+    imgDir = 'imgs'
+    wmDir = 'watermarks'
+
+    fig1,axes1=plt.subplots(1,2, figsize=(15,7), sharex=True)
+    testPlanes(fig1,axes1)
+
+    fig2,axes2=plt.subplots(1,2, figsize=(15,7), sharex=True)
+    testBlocksizes(fig2,axes2)
+
+    # Saving Results
+    fig1.savefig('results/planes.png')
+    fig2.savefig('results/blocks.png')
+
+    plt.show()
