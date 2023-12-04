@@ -14,14 +14,20 @@ def ImageLoader(img):
     - Tuple[str, numpy.ndarray]
         A tuple containing the image path (if applicable) and the loaded image as a NumPy array.
     """
+    if not isinstance(img, (str, np.ndarray)):
+        raise ValueError("Invalid input type. `img` must be a string or a numpy array.")
+
     image = img
     imgPath = None
 
-    if type(img) == str:
+    if isinstance(img, str):
         imgPath = img
-        image = cv2.imread(imgPath, 0)
+        try:
+            image = cv2.imread(imgPath, 0)
+        except Exception as e:
+            raise ValueError(f"Error loading image: {str(e)}")
 
-    image.dtype = np.uint8
+    image = image.astype(np.uint8)
     return imgPath, image
 
 

@@ -3,8 +3,29 @@ import os
 import matplotlib.pyplot as plt
 from main import Encoder, Decoder, ImageLoader
 import cv2
+import argparse
 
 plt.style.use('dark_background')
+
+def getArgs():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i', '--image_dir', type=str, required=True,
+                        help="Directory of test images")
+    parser.add_argument('-w', '--watermark_dir', type=str,
+                        required=True, help="Directory of test watermarks")
+    parser.add_argument('-o', '--result_path', type=str, required=False,
+                        default='results', help="Directory where resulting graph needs to be written.")
+    parser.add_argument('-n','--noise_type',choices=['Gaussian','S&P'],required=False,
+                        default='Gaussian', help='Type of noise to be tested under.')
+    parser.add_argument('-s','--strength',nargs='*',default=['0','0.5'],required=False,
+                        help='Strength of noise used.')
+    parser.add_argument('-t','--type_of_test', choices=['unit_test','complete_test'],required=False,
+                        default='unit_test',help='Type of test to be conducted (over all images or one single image).')
+    parser.add_argument('-c', choices=['planes', 'blocksize', 'both'],required=False,
+                        default='planes',help='Which parameters to be tested.')
+    
+    return parser.parse_args()
+    
 
 class Metrics:
     """
@@ -226,8 +247,9 @@ def testBlocksizes(fig,axes):
 
 if __name__=="__main__":
     # Testing
-    imgDir = 'imgs'
-    wmDir = 'watermarks'
+    opts=getArgs()
+    imgDir = opts.image_dir
+    wmDir = opts.watermark_dir
 
     fig1,axes1=plt.subplots(1,2, figsize=(15,7), sharex=True)
     testPlanes(fig1,axes1)
