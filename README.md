@@ -15,6 +15,7 @@ This method provides robustness against common image processing operations and m
 
 ## Results
 ---
+
 ![plane encoding](results/planes.png)
 ![blocksize encoding](results/blocks.png)
 
