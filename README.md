@@ -13,6 +13,11 @@ A block-based watermarking algorithm for images using bit planes is a method tha
 
 This method provides robustness against common image processing operations and maintains the quality of the original image. The watermark can be used for various purposes such as copyright protection or content authentication.
 
+## Results
+---
+![plane encoding](results/planes.png)
+![blocksize encoding](results/blocks.png)
+
 ## Usage
 ---
 ```bash
