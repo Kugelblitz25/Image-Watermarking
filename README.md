@@ -16,7 +16,7 @@ This method provides robustness against common image processing operations and m
 ## Results
 ---
 
-![plane encoding](./results/planes.png)
+![./results/planes.png](https://raw.githubusercontent.com/Kugelblitz25/Image-Watermarking/master/results/planes.png)
 ![blocksize encoding](results/blocks.png)
 
 ## Usage
