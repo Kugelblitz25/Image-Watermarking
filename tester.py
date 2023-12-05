@@ -8,6 +8,13 @@ import argparse
 plt.style.use('dark_background')
 
 def getArgs():
+    """
+    Parse command-line arguments for the script.
+
+    Returns:
+    - argparse.Namespace
+        Parsed command-line arguments.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--image_dir', type=str, required=True,
                         help="Directory of test images")
@@ -15,18 +22,17 @@ def getArgs():
                         required=True, help="Directory of test watermarks")
     parser.add_argument('-o', '--result_path', type=str, required=False,
                         default='results', help="Directory where resulting graph needs to be written.")
-    parser.add_argument('-n','--noise_type',choices=['Gaussian','S&P'],required=False,
+    parser.add_argument('-n','--noise_type',choices=['Gaussian','SnP'],required=False,
                         default='Gaussian', help='Type of noise to be tested under.')
-    parser.add_argument('-s','--strength',nargs='*',default=['0','0.5'],required=False,
+    parser.add_argument('-s','--strength',nargs='*',type= float,default=[0,0.5],required=False,
                         help='Strength of noise used.')
-    parser.add_argument('-t','--type_of_test', choices=['unit_test','complete_test'],required=False,
+    parser.add_argument('-t','--type_of_test', choices=['single','unit','complete'],required=False,
                         default='unit_test',help='Type of test to be conducted (over all images or one single image).')
-    parser.add_argument('-c', choices=['planes', 'blocksize', 'both'],required=False,
+    parser.add_argument('-p','--param', choices=['planes', 'blocksize', 'both'],required=False,
                         default='planes',help='Which parameters to be tested.')
     
     return parser.parse_args()
     
-
 class Metrics:
     """
     Class for computing image quality metrics.
@@ -108,21 +114,7 @@ class Metrics:
         return CC / (img1.std() * img2.std())
 
 class Tester:
-    """
-    Class for testing the encoder and decoder with various parameters.
-
-    Attributes:
-    - imageDir: str
-        Directory containing the original images.
-    - watermarkDir: str
-        Directory containing the watermarks.
-    - plane: int
-        Bit plane used for encoding/decoding.
-    - blocksize: int
-        Size of each block for encoding/decoding.
-    """
-
-    def __init__(self, imageDir: str, watermarkDir: str, plane: int = 1, blocksize: int = 2) -> None:
+    def __init__(self, imageDir: str, watermarkDir: str, plane: int, blocksize: int, noise: str, strength: list[int]) -> None:
         """
         Initialize the Tester with the specified directories and parameters.
 
@@ -135,16 +127,42 @@ class Tester:
             Bit plane used for encoding/decoding. Default is 1.
         - blocksize: int, optional
             Size of each block for encoding/decoding. Default is 2.
+        - noise: str, optional
+            Type of noise to be applied (Gaussian or SnP). Default is Gaussian.
+        - strength: list[int], optional
+            Strength of the applied noise. Default is [0, 0.5].
         """
         self.imageDir = imageDir
         self.watermarkDir = watermarkDir
         self.images = os.listdir(self.imageDir)
         self.watermarks = os.listdir(self.watermarkDir)
-        self.metrics = Metrics()
+        self.noise_type = noise
+        self.noise_strength = strength
+        self.metrics=Metrics()
         self.encoder = Encoder(blocksize, plane)
         self.decoder = Decoder(blocksize, plane)
 
-    def unitTest(self, imageIdx: int, watermarkIdx: int, disp: bool = False):
+    def getNoise(self, shape: tuple[int]) -> np.ndarray:
+        """
+        Generate and return the specified type of noise.
+
+        Parameters:
+        - shape: Tuple
+            Shape of the noise array.
+
+        Returns:
+        - numpy.ndarray
+            The generated noise array.
+        """
+        if self.noise_type=="Gaussian":
+            noise = np.random.normal(*self.noise_strength[:2],shape)
+            return np.uint8(np.round(noise,0))
+        
+        if self.noise_type=="SnP":
+            noise = np.random.choice([0,255],shape,True,[1-self.noise_strength[0],self.noise_strength[0]])
+            return np.uint8(noise)
+
+    def unitTest(self, imageIdx: int, watermarkIdx: int, disp: bool = False)-> tuple[float,float]:
         """
         Perform a unit test with a specific pair of images and watermarks.
 
@@ -153,6 +171,8 @@ class Tester:
             Index of the image in the 'images' directory.
         - watermarkIdx: int
             Index of the watermark in the 'watermarks' directory.
+        - disp: bool, optional
+            Whether to display the images during testing. Default is False.
 
         Returns:
         - Tuple[float, float]
@@ -165,8 +185,7 @@ class Tester:
 
         encoded_image = self.encoder.encode(img, wm)
 
-        noise = 0.5 * np.random.randn(*encoded_image.shape)
-        encoded_image_gaussian_noise = np.uint8(np.round(encoded_image + noise, 0))
+        encoded_image_gaussian_noise = encoded_image + self.getNoise(encoded_image.shape)
 
         decoded_wm = self.decoder.decode(encoded_image_gaussian_noise)
 
@@ -180,7 +199,7 @@ class Tester:
 
         return psnr, ncc
 
-    def CompleteTest(self):
+    def CompleteTest(self)-> tuple[float,float]:
         """
         Perform a complete test for all combinations of images and watermarks.
 
@@ -202,6 +221,9 @@ class Tester:
         return PSNR_Tot / num_pairs, NCC_Tot / num_pairs
 
 def plotRes(ax, x, y, title, xlabel, ylabel):
+    """
+    Plot the resluts.
+    """
     ax.plot(x, y, marker='o')
     ax.set_title(title, fontsize=12, fontweight='bold')
     ax.set_xlabel(xlabel, fontsize=12)
@@ -209,15 +231,20 @@ def plotRes(ax, x, y, title, xlabel, ylabel):
     ax.set_xticks(x)
     ax.grid(axis='x',linestyle='--',color='grey')
 
-def testPlanes(fig,axes):
-    # Testing for encoding in different planes with blocksize=4 
+def testPlanes(imgDir, wmDir, fig, axes, typeOfTest, noise, strength):
+    """
+    Testing for effect of encoding in different planes with blocksize=2
+    """
     planes = np.arange(1,9)
     PSNRs = []
     NCCs = []
 
     for plane in planes:
-        tester = Tester(imgDir, wmDir, plane, 4)
-        psnr, ncc = tester.CompleteTest()
+        tester = Tester(imgDir, wmDir, plane, 2, noise, strength)
+        if typeOfTest=='complete':
+            psnr, ncc = tester.CompleteTest()
+        if typeOfTest=='unit':
+            psnr, ncc = tester.unitTest(0,0)
         PSNRs.append(psnr)
         NCCs.append(ncc)
 
@@ -227,15 +254,20 @@ def testPlanes(fig,axes):
     plotRes(ax[1],planes,NCCs,'Effect on NCC.','Plane used for encoding','NCC between normal and extracted watermark.')
     ax[1].set_ylim(0.5,1)
 
-def testBlocksizes(fig,axes):
-    # Testing for encoding with different blocksizes at plane=2 
+def testBlocksizes(imgDir, wmDir, fig, axes, typeOfTest, noise, strength):
+    """ 
+    Testing for effects of encoding with different blocksizes at plane=2 
+    """
     blocksizes = np.arange(1,11)
     PSNRs = []
     NCCs = []
 
     for bs in blocksizes:
-        tester = Tester(imgDir, wmDir, 2, bs)
-        psnr, ncc = tester.CompleteTest()
+        tester = Tester(imgDir, wmDir, 2, bs, noise, strength)
+        if typeOfTest=='complete':
+            psnr, ncc = tester.CompleteTest()
+        if typeOfTest=='unit':
+            psnr, ncc = tester.unitTest(0,0)
         PSNRs.append(psnr)
         NCCs.append(ncc)
 
@@ -251,14 +283,26 @@ if __name__=="__main__":
     imgDir = opts.image_dir
     wmDir = opts.watermark_dir
 
-    fig1,axes1=plt.subplots(1,2, figsize=(15,7), sharex=True)
-    testPlanes(fig1,axes1)
+    if opts.param=='planes' or opts.param=='both':
+        if opts.type_of_test=='single':
+            tester=Tester(imgDir, wmDir, 2, 3, opts.noise_type, opts.strength)
+            psnr,ncc = tester.unitTest(0, 0, True)
+            print('PSNR between original and encoded image:',psnr)
+            print('NCC between original and extracted watermark:',ncc)
+        else:
+            fig1,axes1=plt.subplots(1,2, figsize=(15,7), sharex=True)
+            testPlanes(imgDir, wmDir, fig1, axes1, opts.type_of_test, opts.noise_type, opts.strength)
+            fig1.savefig(opts.result_path+'/planes.png')
 
-    fig2,axes2=plt.subplots(1,2, figsize=(15,7), sharex=True)
-    testBlocksizes(fig2,axes2)
-
-    # Saving Results
-    fig1.savefig('results/planes.png')
-    fig2.savefig('results/blocks.png')
+    if opts.param=='blocksize' or opts.param=='both':
+        if opts.type_of_test=='single':
+            tester=Tester(imgDir, wmDir, 2, 3, opts.noise_type, opts.strength)
+            psnr,ncc = tester.unitTest(0, 0, True)
+            print('PSNR between original and encoded image:',psnr)
+            print('NCC between original and extracted watermark:',ncc)
+        else:
+            fig2,axes2=plt.subplots(1,2, figsize=(15,7), sharex=True)
+            testBlocksizes(imgDir, wmDir, fig2, axes2, opts.type_of_test, opts.noise_type, opts.strength)
+            fig2.savefig(opts.result_path+'/blocks.png')
 
     plt.show()

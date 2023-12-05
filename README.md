@@ -37,11 +37,13 @@ options:
 ```
 ## Test
 ---
-
+```bash
+python3 tester.py -i imgs/ -w watermarks/ --param blocksize --noise_type SnP --strength 0.1 --type_of_test complete
+```
 
 ```bash
-usage: tester.py [-h] -i IMAGE_DIR -w WATERMARK_DIR [-o RESULT_PATH] [-n {Gaussian,S&P}] [-s [STRENGTH ...]] [-t {unit_test,complete_test}]
-                 [-c {planes,blocksize,both}]
+usage: tester.py [-h] -i IMAGE_DIR -w WATERMARK_DIR [-o RESULT_PATH] [-n {Gaussian,SnP}] [-s [STRENGTH ...]]
+                 [-t {single,unit,complete}] [-p {planes,blocksize,both}]
 
 options:
   -h, --help            show this help message and exit
@@ -51,12 +53,12 @@ options:
                         Directory of test watermarks
   -o RESULT_PATH, --result_path RESULT_PATH
                         Directory where resulting graph needs to be written.
-  -n {Gaussian,S&P}, --noise_type {Gaussian,S&P}
+  -n {Gaussian,SnP}, --noise_type {Gaussian,SnP}
                         Type of noise to be tested under.
   -s [STRENGTH ...], --strength [STRENGTH ...]
                         Strength of noise used.
-  -t {unit_test,complete_test}, --type_of_test {unit_test,complete_test}
+  -t {single,unit,complete}, --type_of_test {single,unit,complete}
                         Type of test to be conducted (over all images or one single image).
-  -c {planes,blocksize,both}
+  -p {planes,blocksize,both}, --param {planes,blocksize,both}
                         Which parameters to be tested.
 ```
