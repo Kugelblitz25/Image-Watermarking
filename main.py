@@ -1,34 +1,64 @@
-import cv2
+"""
+This module contains the implimentation of block based Image Watermarking
+using bitplane splicing.
+
+Author: Vighnesh Nayak
+Date: 2 Dec 2023
+Github: https://github.com/Kugelblitz25
+"""
+
 import numpy as np
+import cv2
 
 
-def ImageLoader(img):
-    """
-    Load an image from either a file path or a NumPy array.
+class Image:
+    def __init__(self, img):
+        """
+        Load an image from either a file path or a NumPy array.
 
-    Parameters:
-    - img: str or numpy.ndarray
-        If str, the file path of the image. If numpy.ndarray, the image itself.
+        Parameters:
+        - img: str or numpy.ndarray
+            If str, the file path of the image. If numpy.ndarray, the image itself.
 
-    Returns:
-    - Tuple[str, numpy.ndarray]
-        A tuple containing the image path (if applicable) and the loaded image as a NumPy array.
-    """
-    if not isinstance(img, (str, np.ndarray)):
-        raise ValueError("Invalid input type. `img` must be a string or a numpy array.")
+        Returns:
+        - Tuple[str, numpy.ndarray]
+            A tuple containing the image path (if applicable) and the loaded image as a NumPy array.
+        """
+        if not isinstance(img, (str, np.ndarray)):
+            raise ValueError(
+                "Invalid input type. `img` must be a string or a numpy array.")
 
-    image = img
-    imgPath = None
+        image = img
+        imgPath = None
 
-    if isinstance(img, str):
-        imgPath = img
-        try:
-            image = cv2.imread(imgPath, 0)
-        except Exception as e:
-            raise ValueError(f"Error loading image: {str(e)}")
+        if isinstance(img, str):
+            imgPath = img
+            try:
+                image = cv2.imread(imgPath, 0)
+            except Exception as e:
+                raise ValueError(f"Error loading image: {str(e)}")
 
-    image = image.astype(np.uint8)
-    return imgPath, image
+        self.image = image.astype(np.uint8)
+        self.imageSize = np.array(self.image.shape)
+
+    def reshape(self, shape: list[int]):
+        """
+        Reshape the image into required size.
+
+        Parameters:
+        - shape : List[int]
+            Required size of the image.
+        """
+        self.image = cv2.resize(self.image, shape[::-1])
+        self.imageSize = np.array(self.image.shape)
+
+    def binarize(self):
+        """
+        Binaruze the image into 0's & 1's.
+        """
+        _, self.image = cv2.threshold(self.image, 127, 255, cv2.THRESH_BINARY)
+        self.image = self.image / 255
+        self.image = self.image.astype('uint8')
 
 
 class Encoder:
@@ -52,35 +82,8 @@ class Encoder:
         - plane: int, optional
             Bit plane used for encoding. Default is 1.
         """
-        self.plane = plane-1
+        self.plane = plane - 1
         self.blockSize = blockSize
-
-    def getImage(self, img):
-        """
-        Load the image to be encoded and extract its dimensions.
-
-        Parameters:
-        - img: str or numpy.ndarray
-            If str, the file path of the image. If numpy.ndarray, the image itself.
-        """
-        self.imagePath, self.img = ImageLoader(img)
-        self.h, self.w = self.img.shape
-
-    def getWatermark(self, watermark):
-        """
-        Load the watermark image, resize it, and convert it to binary.
-
-        Parameters:
-        - watermark: str or numpy.ndarray
-            If str, the file path of the watermark image. If numpy.ndarray, the watermark itself.
-        """
-        self.watermarkPath, self.watermark = ImageLoader(watermark)
-
-        self.watermark = cv2.resize(
-            self.watermark, (self.w//self.blockSize, self.h//self.blockSize))
-        _, self.watermark = cv2.threshold(self.watermark, 127, 255, cv2.THRESH_BINARY)
-
-        self.h_w, self.w_w = self.watermark.shape
 
     def encodeBlockBit(self, row: int, col: int):
         """
@@ -97,12 +100,14 @@ class Encoder:
             Encoded block of the image.
         """
         enc = self.watermark[row, col]
-        img_block = self.img[row*self.blockSize:(row+1)*self.blockSize,
-                             col*self.blockSize:(col+1)*self.blockSize]
-        enc_block = enc*np.ones_like(img_block, 'uint8')
-        masked_img = img_block & (255 - (1 << self.plane))
-        masked_enc = enc_block & (1 << self.plane)
-        return masked_img + masked_enc
+        imgBlock = self.img[
+            row * self.blockSize: (row + 1) * self.blockSize,
+            col * self.blockSize: (col + 1) * self.blockSize
+        ]
+        encBlock = enc * np.ones_like(imgBlock, "uint8")
+        maskedImg = imgBlock & (255 - (1 << self.plane))
+        maskedEnc = encBlock & (1 << self.plane)
+        return maskedImg + maskedEnc
 
     def encode(self, img, watermark):
         """
@@ -110,31 +115,39 @@ class Encoder:
 
         Parameters:
         - img: str or numpy.ndarray
-            If str, the file path of the image. If numpy.ndarray, the image itself.
+            If str, the file path of the image.
+            If numpy.ndarray, the image itself.
         - watermark: str or numpy.ndarray
-            If str, the file path of the watermark image. If numpy.ndarray, the watermark itself.
+            If str, the file path of the watermark image.
+            If numpy.ndarray, the watermark itself.
 
         Returns:
         - numpy.ndarray
             Encoded image.
         """
-        self.getImage(img)
-        self.getWatermark(watermark)
+        image = Image(img)
+        watermark = Image(watermark)
+        watermark.reshape(image.imageSize // self.blockSize)
+        watermark.binarize()
+        self.img, self.imgSize = image.image, image.imageSize
+        self.watermark, self.watermarkSize = watermark.image, watermark.imageSize
 
-        assert (self.h_w == self.h//self.blockSize and self.w_w == self.w//self.blockSize), \
-            f'Image and watermark shapes of {self.img.shape} and {self.watermark.shape} are incompatible.'
+        assert all(self.watermarkSize == self.imgSize // self.blockSize)
 
         encodedImg = np.zeros_like(self.img)
-        for col in range(self.w_w):
-            for row in range(self.h_w):
-                encodedImg[row*self.blockSize:(row+1)*self.blockSize,
-                           col*self.blockSize:(col+1)*self.blockSize] = self.encodeBlockBit(row, col)
-        return encodedImg.astype('uint8')
+        h, w = self.watermarkSize
+        for col in range(w):
+            for row in range(h):
+                encodedImg[
+                    row * self.blockSize: (row + 1) * self.blockSize,
+                    col * self.blockSize: (col + 1) * self.blockSize
+                ] = self.encodeBlockBit(row, col)
+        return encodedImg.astype("uint8")
 
 
 class Decoder:
     """
-    For decoding a watermark from an encoded image using a block-based approach.
+    For decoding a watermark from an encoded image.
 
     Attributes:
     - blockSize: int
@@ -153,20 +166,8 @@ class Decoder:
         - plane: int, optional
             Bit plane used for decoding. Default is 1.
         """
-        self.plane = plane-1
+        self.plane = plane - 1
         self.blockSize = blockSize
-
-    def getImage(self, img):
-        """
-        Load the image to be decoded and extract its dimensions.
-
-        Parameters:
-        - img: str or numpy.ndarray
-            If str, the file path of the image. If numpy.ndarray, the image itself.
-        """
-        self.imagePath, self.img = ImageLoader(img)
-        self.h, self.w = self.img.shape
-        self.h_w, self.w_w = self.h//self.blockSize, self.w//self.blockSize
 
     def decode(self, img):
         """
@@ -174,20 +175,26 @@ class Decoder:
 
         Parameters:
         - img: str or numpy.ndarray
-            If str, the file path of the encoded image. If numpy.ndarray, the encoded image itself.
+            If str, the file path of the encoded image.
+            If numpy.ndarray, the encoded image itself.
 
         Returns:
         - numpy.ndarray
             Decoded watermark.
         """
-        self.getImage(img)
-        watermark = np.zeros((self.h_w, self.w_w))
+        image = Image(img)
+        self.img, self.imgSize = image.image, image.imageSize
+        self.watermarkSize = self.imgSize // self.blockSize
+        watermark = np.zeros(self.watermarkSize)
 
-        img_plane = self.img & (1 << self.plane)
-        for col in range(self.w_w):
-            for row in range(self.h_w):
-                img_block = img_plane[row*self.blockSize:(row+1)*self.blockSize,
-                                      col*self.blockSize:(col+1)*self.blockSize]
-                enc_byte = 255 * np.round(img_block.mean(), 0)
-                watermark[row, col] = enc_byte
-        return watermark.astype('uint8')
+        imgPlane = self.img & (1 << self.plane)
+        h, w = self.watermarkSize
+        for col in range(w):
+            for row in range(h):
+                imgBlock = imgPlane[
+                    row * self.blockSize: (row + 1) * self.blockSize,
+                    col * self.blockSize: (col + 1) * self.blockSize
+                ]
+                encByte = 255 * np.round(imgBlock.mean(), 0)
+                watermark[row, col] = encByte
+        return watermark.astype("uint8")
